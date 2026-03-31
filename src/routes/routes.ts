@@ -2,24 +2,23 @@ import { Express } from 'express';
 import fs from 'fs';
 import path from 'path';
 
-export function registerRoutes(app: Express) {
+export async function registerRoutes(app: Express) {
   const routesPath = __dirname;
 
-  fs.readdirSync(routesPath).forEach((file) => {
-    if (
-      file === 'index.ts' ||
-      file === 'index.js' ||
-      !file.endsWith('.ts') && !file.endsWith('.js')
-    ) {
-      return;
-    }
+  const files = fs.readdirSync(routesPath);
+
+  for (const file of files) {
+    if (!file.match(/\.(ts|js)$/) || file.startsWith("routes")) continue;
 
     const routeName = file.replace(/\.(ts|js)$/, '');
-    const route = require(path.join(routesPath, file));
 
-    if (route.router) {
-      app.use(`/${routeName}`, route.router);
+    const route = await import(path.join(routesPath, file));
+    const router = route.router || route.default;
+
+    if (router) {
+      app.use(`/${routeName}`, router);
       console.log(`📦 Loaded route: /${routeName}`);
+      
     }
-  });
+  }
 }
