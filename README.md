@@ -1,2 +1,1 @@
-# SE-2240-Lab-2-
-lab 2 for SE TESTING 
+# SE-2240-Final-Project (Project DanLog)
