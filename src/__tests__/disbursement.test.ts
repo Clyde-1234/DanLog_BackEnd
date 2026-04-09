@@ -111,8 +111,7 @@ describe("POST /disbursements", () => {
       .send({
         name: "Item",
         unit: 2,
-        price_per_unit: 50,
-        total_price: 100,
+        amount: 100,
       });
 
     expect(res.status).toBe(201);
