@@ -10,40 +10,6 @@ router.get("/", async (req, res) => {
   res.json(data);
 });
 
-router.get("/status", async (req, res) => {
-  const { status, page = 1, limit = 20 } = req.query;
-
-  const pageNum = parseInt(String(page));
-  const limitNum = parseInt(String(limit));
-
-  const from = (pageNum - 1) * limitNum;
-  const to = from + limitNum - 1;
-
-  let query = supabase
-    .from("orders")
-    .select("*")
-    .order("created_at", { ascending: false })
-    .range(from, to);
-
-  if (status) {
-    const statuses = String(status).split(",");
-    query = query.in("status", statuses);
-  } else {
-    query = query.in("status", ["pending", "in queue", "completed"]);
-  }
-
-  const { data, error } = await query;
-
-  if (error) return res.status(500).json({ error: error.message });
-
-  res.json({
-    page: pageNum,
-    limit: limitNum,
-    data,
-  });
-});
-
-
 // GET /orders/month?month=5&year=2024
 router.get("/month", async (req, res) => {
   const { month, year } = req.query;
@@ -68,7 +34,67 @@ router.get("/month", async (req, res) => {
   res.json(data);
 });
 
+// Get all daily totals of both orders and disbursements for a given month and year
+// GET /orders/month?month=5&year=2024
+router.get("/daily-totals", async (req, res) => {
+  const { month, year } = req.query;
 
+  // ✅ validation
+  if (!month || !year) {
+    return res.status(400).json({
+      error: "month and year are required",
+    });
+  }
+
+  const monthNum = parseInt(month as string);
+  const yearNum = parseInt(year as string);
+
+  if (isNaN(monthNum) || isNaN(yearNum)) {
+    return res.status(400).json({
+      error: "month and year must be numbers",
+    });
+  }
+
+  try {
+    const { data, error } = await supabase.rpc("get_daily_totals", {
+      month: monthNum,
+      year: yearNum,
+    });
+
+    if (error) {
+      return res.status(500).json({
+        error: error.message,
+      });
+    }
+
+    // ✅ Optional: fill missing days with 0
+    const daysInMonth = new Date(yearNum, monthNum, 0).getDate();
+
+    const formatted: { [key: number]: number } = {};
+
+    // initialize all days to 0
+    for (let d = 1; d <= daysInMonth; d++) {
+      formatted[d] = 0;
+    }
+
+    // fill actual values
+    data.forEach((row: { day: string | number | Date; total: any; }) => {
+      const day = new Date(row.day).getDate();
+      formatted[day] = Number(row.total);
+    });
+
+    res.json({
+      month: monthNum,
+      year: yearNum,
+      totals: formatted,
+    });
+
+  } catch (err) {
+    res.status(500).json({
+      error: "Unexpected server error",
+    });
+  }
+});
 
 
 
@@ -77,7 +103,7 @@ router.get("/month", async (req, res) => {
 //------------------------------------------------------------------------------------------
 
 
-
+// Get the total of orders monthly
 // GET /orders/total/month?month=5&year=2024
 router.get("/total/month", async (req, res) => {
     const { month, year } = req.query;
@@ -92,6 +118,7 @@ router.get("/total/month", async (req, res) => {
     res.json({ total: data });
 });
 
+// Get the total of orders annually
 // GET /disbursement/total/year?year=2024
 router.get("/total/year", async (req, res) => {
   const { year } = req.query;
@@ -125,14 +152,14 @@ router.get("/total/year", async (req, res) => {
 
 // POST a new order
 router.post("/", async (req, res) => {
-  const { daily_id, customer_name, total_weight, load, status, amount } = req.body;
-  if (!daily_id || !customer_name || !total_weight || !load || !status || !amount) return res.status(400).json({ error: "All fields required" });
+  const { customer_name, total_weight, load, status, amount, id=null } = req.body;
+  if (!customer_name || !total_weight || !load || !status || !amount) return res.status(400).json({ error: "All fields required" });
 
-  if (typeof daily_id !== "string" || typeof customer_name !== "string" || typeof total_weight !== "number" || typeof load !== "number" || typeof status !== "string" || typeof amount !== "number") {
+  if (typeof customer_name !== "string" || typeof total_weight !== "number" || typeof load !== "number" || typeof status !== "string" || typeof amount !== "number") {
     return res.status(400).json({ error: "Invalid data types" });
   }
 
-  const { data, error } = await supabase.from("orders").insert([{ daily_id, customer_name, total_weight, load, status, amount }]);
+  const { data, error } = await supabase.from("orders").insert([{customer_name, total_weight, load, status, amount, id }]);
   if (error) return res.status(500).json({ error: error.message });
 
   res.status(201).json("Order created successfully");
@@ -146,6 +173,22 @@ router.delete("/", async (req, res) => {
   if (error) return res.status(500).json({ error: error.message });
 
   res.json({ message: "Order deleted"});
+});
+
+
+// Update order status
+router.patch("/", async (req, res) => {
+  const { id, status } = req.body;
+  if (!id || !status) return res.status(400).json({ error: "ID and status required" });
+
+  if (typeof id !== "number" || typeof status !== "string") {
+    return res.status(400).json({ error: "Invalid data types" });
+  }
+
+  const { data, error } = await supabase.from("orders").update({ status }).eq("id", id);
+  if (error) return res.status(500).json({ error: error.message });
+
+  res.json({ message: "Order status updated"});
 });
 
 export default router;

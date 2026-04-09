@@ -9,7 +9,7 @@ router.get("/", async (req, res) => {
   const { data, error } = await supabase.from("disbursements").select("*");
   if (error) return res.status(500).json({ error: error.message });
   res.json(data);
-});
+}); 
 
 // GET /disbursement/month?month=5&year=2024
 router.get("/month", async (req, res) => {
@@ -82,14 +82,14 @@ router.get("/total/year", async (req, res) => {
 
 // POST a new disbursement
 router.post("/", async (req, res) => {
-  const { name, unit, price_per_unit, total_price } = req.body;
-  if (!name || !unit || !price_per_unit || !total_price) return res.status(400).json({ error: "All fields required" });
+  const { name, unit, amount } = req.body;
+  if (!name || !unit || !amount) return res.status(400).json({ error: "All fields required" });
 
-  if (typeof name !== "string" || typeof unit !== "number" || typeof price_per_unit !== "number" || typeof total_price !== "number") {
+  if (typeof name !== "string" || typeof unit !== "number" || typeof amount !== "number") {
     return res.status(400).json({ error: "Invalid data types" });
   }
 
-  const { data, error } = await supabase.from("disbursements").insert([{ name, unit, price_per_unit, total_price}]);
+  const { data, error } = await supabase.from("disbursements").insert([{ name, unit, amount }]);
   if (error) return res.status(500).json({ error: error.message });
 
   res.status(201).json("Disbursement created successfully");
