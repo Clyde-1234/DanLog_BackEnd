@@ -155,10 +155,6 @@ router.post("/", async (req, res) => {
   const { customer_name, total_weight, load, status, amount, id=null } = req.body;
   if (!customer_name || !total_weight || !load || !status || !amount) return res.status(400).json({ error: "All fields required" });
 
-  if (typeof customer_name !== "string" || typeof total_weight !== "number" || typeof load !== "number" || typeof status !== "string" || typeof amount !== "number") {
-    return res.status(400).json({ error: "Invalid data types" });
-  }
-
   const { data, error } = await supabase.from("orders").insert([{customer_name, total_weight, load, status, amount, id }]);
   if (error) return res.status(500).json({ error: error.message });
 
