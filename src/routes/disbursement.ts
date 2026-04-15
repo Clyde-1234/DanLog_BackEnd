@@ -11,6 +11,7 @@ router.get("/", async (req, res) => {
   res.json(data);
 }); 
 
+// at a given month and year, get all disbursements within range
 // GET /disbursement/month?month=5&year=2024
 router.get("/month", async (req, res) => {
   const { month, year } = req.query;
@@ -35,6 +36,7 @@ router.get("/month", async (req, res) => {
   res.json(data);
 });
 
+// at a given month and year, get total disbursements within that specific month
 // GET /disbursements/total/month?month=5&year=2024
 router.get("/total/month", async (req, res) => {
     const { month, year } = req.query;
@@ -49,6 +51,7 @@ router.get("/total/month", async (req, res) => {
     res.json({ total: data });
 });
 
+// at a given year, get total disbursements for each month of that year
 // GET /disbursement/total/year?year=2024
 router.get("/total/year", async (req, res) => {
   const { year } = req.query;
