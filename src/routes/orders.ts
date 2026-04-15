@@ -10,6 +10,62 @@ router.get("/", async (req, res) => {
   res.json(data);
 });
 
+router.get("/", async (req, res) => {
+  const { limit = 20, cursorCreatedAt, cursorId } = req.query;
+
+  const limitNum = parseInt(  limit as string, 10);
+
+  let query = supabase
+    .from("orders")
+    .select("*")
+    .order("created_at", { ascending: false })
+    .order("id", { ascending: false })
+    .limit(limitNum);
+
+  if (cursorCreatedAt && cursorId) {
+    query = query.or(
+      `created_at.lt.${cursorCreatedAt},and(created_at.eq.${cursorCreatedAt},id.lt.${cursorId})`
+    );
+  }
+
+  const { data, error } = await query;
+
+  if (error) {
+    return res.status(500).json({ error: error.message });
+  }
+
+  const lastItem = data[data.length - 1];
+
+  res.json({
+    data,
+    nextCursor: lastItem
+      ? {
+          created_at: lastItem.created_at,
+          id: lastItem.id,
+        }
+      : null,
+    hasMore: data.length === limitNum,
+  });
+});
+
+
+//Get the latest order made
+router.get("/latest", async (req, res) => {
+  const { data, error } = await supabase
+    .from("orders")
+    .select("*")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .single();
+
+  if (error) {
+    return res.status(500).json({ error: error.message });
+  }
+
+  res.json(data);
+});
+
+// at a given month and year, get all orders within ra
 // GET /orders/month?month=5&year=2024
 router.get("/month", async (req, res) => {
   const { month, year } = req.query;
@@ -35,7 +91,7 @@ router.get("/month", async (req, res) => {
 });
 
 // Get all daily totals of both orders and disbursements for a given month and year
-// GET /orders/month?month=5&year=2024
+// GET /orders/daily-totals?month=5&year=2024
 router.get("/daily-totals", async (req, res) => {
   const { month, year } = req.query;
 
@@ -152,7 +208,7 @@ router.get("/total/year", async (req, res) => {
 
 // POST a new order
 router.post("/", async (req, res) => {
-  const { customer_name, total_weight, load, status, amount, id=null } = req.body;
+  let { customer_name, total_weight, load, status, amount, id=null } = req.body;
   if (!customer_name || !total_weight || !load || !status || !amount) return res.status(400).json({ error: "All fields required" });
 
   const { data, error } = await supabase.from("orders").insert([{customer_name, total_weight, load, status, amount, id }]);

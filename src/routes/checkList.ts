@@ -14,7 +14,8 @@ router.get("/", async (req, res) => {
 });
 
 
-
+//post a new check list item
+// POST /checkList
 router.post("/", async (req, res) => {
     const { task, is_done } = req.body;
 
@@ -32,8 +33,8 @@ router.post("/", async (req, res) => {
 });
 
 
-
-
+// update a check list item
+// PATCH /check-list
 router.patch("/", async (req, res) => {
     const { id, is_done } = req.body;
 
@@ -51,6 +52,7 @@ router.patch("/", async (req, res) => {
 });
 
 
+// delete a check list item
 // DELETE /check-list/:id
 router.delete("/", async (req, res) => {
     const { id } = req.body;
