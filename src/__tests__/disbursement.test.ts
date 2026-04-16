@@ -110,7 +110,7 @@ describe("POST /disbursements", () => {
       .post("/disbursements")
       .send({
         name: "Item",
-        unit: 2,
+        transaction_date: "2024-01-01",
         amount: 100,
       });
 
