@@ -83,16 +83,22 @@ router.get("/total/year", async (req, res) => {
   });
 });
 
+// Get total disbursements for all time
+// GET /disbursement/total
+router.get("/total", async (req, res) => {
+  const { data, error } = await supabase.rpc("get_total_disbursements");
+
+  if (error) return res.status(500).json({ error: error.message });
+
+  res.json({ total: data });
+});
+
 // POST a new disbursement
 router.post("/", async (req, res) => {
-  const { name, unit, amount } = req.body;
-  if (!name || !unit || !amount) return res.status(400).json({ error: "All fields required" });
+  const { name, amount, transaction_date } = req.body;
+  if (!name || !amount || !transaction_date) return res.status(400).json({ error: "All fields required" });
 
-  if (typeof name !== "string" || typeof unit !== "number" || typeof amount !== "number") {
-    return res.status(400).json({ error: "Invalid data types" });
-  }
-
-  const { data, error } = await supabase.from("disbursements").insert([{ name, unit, amount }]);
+  const { data, error } = await supabase.from("disbursements").insert([{ name, amount, transaction_date}]);
   if (error) return res.status(500).json({ error: error.message });
 
   res.status(201).json("Disbursement created successfully");
