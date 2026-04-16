@@ -3,13 +3,6 @@ import { supabase } from "../supabaseClient";
 
 const router = express.Router();
 
-// GET /orders (get all orders)
-router.get("/", async (req, res) => {
-  const { data, error } = await supabase.from("orders").select("*");
-  if (error) return res.status(500).json({ error: error.message });
-  res.json(data);
-});
-
 router.get("/", async (req, res) => {
   const { limit = 20, cursorCreatedAt, cursorId } = req.query;
 
