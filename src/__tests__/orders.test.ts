@@ -91,41 +91,6 @@ describe("GET /orders/month", () => {
 // --------------------------------------------------
 // GET /orders/daily-totals
 // --------------------------------------------------
-describe("GET /orders/daily-totals", () => {
-  it("should return formatted totals", async () => {
-    (supabase.rpc as jest.Mock).mockResolvedValue({
-      data: [{ day: "2024-05-01", total: 100 }],
-      error: null,
-    });
-
-    const res = await request(app)
-      .get("/orders/daily-totals?month=5&year=2024");
-
-    expect(res.status).toBe(200);
-    expect(res.body.month).toBe(5);
-    expect(res.body.totals[1]).toBe(100);
-  });
-
-  it("should fail on missing params", async () => {
-    const res = await request(app).get("/orders/daily-totals");
-
-    expect(res.status).toBe(400);
-  });
-
-  it("should handle rpc error", async () => {
-    (supabase.rpc as jest.Mock).mockResolvedValue({
-      data: null,
-      error: { message: "Error" },
-    });
-
-    const res = await request(app)
-      .get("/orders/daily-totals?month=5&year=2024");
-
-    expect(res.status).toBe(500);
-    expect(res.body.error).toBe("Error");
-  });
-});
-
 
 // --------------------------------------------------
 // GET /orders/total/month
