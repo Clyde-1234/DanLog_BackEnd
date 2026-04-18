@@ -84,8 +84,8 @@ router.get("/month", async (req, res) => {
 });
 
 // Get all daily totals of both orders and disbursements for a given month and year
-// GET /orders/daily-totals?month=5&year=2024
-router.get("/daily-totals", async (req, res) => {
+// GET /orders/daily-orders?month=5&year=2024
+router.get("/daily-orders", async (req, res) => {
   const { month, year } = req.query;
 
   // ✅ validation
@@ -95,8 +95,8 @@ router.get("/daily-totals", async (req, res) => {
     });
   }
 
-  const monthNum = parseInt(month as string);
-  const yearNum = parseInt(year as string);
+  const monthNum = parseInt(month as string, 10);
+  const yearNum = parseInt(year as string, 10);
 
   if (isNaN(monthNum) || isNaN(yearNum)) {
     return res.status(400).json({
@@ -105,10 +105,13 @@ router.get("/daily-totals", async (req, res) => {
   }
 
   try {
-    const { data, error } = await supabase.rpc("get_daily_totals", {
-      month: monthNum,
-      year: yearNum,
-    });
+    const { data, error } = await supabase.rpc(
+      "get_daily_order_totals",
+      {
+        month: monthNum,
+        year: yearNum,
+      }
+    );
 
     if (error) {
       return res.status(500).json({
@@ -116,26 +119,10 @@ router.get("/daily-totals", async (req, res) => {
       });
     }
 
-    // ✅ Optional: fill missing days with 0
-    const daysInMonth = new Date(yearNum, monthNum, 0).getDate();
-
-    const formatted: { [key: number]: number } = {};
-
-    // initialize all days to 0
-    for (let d = 1; d <= daysInMonth; d++) {
-      formatted[d] = 0;
-    }
-
-    // fill actual values
-    data.forEach((row: { day: string | number | Date; total: any; }) => {
-      const day = new Date(row.day).getDate();
-      formatted[day] = Number(row.total);
-    });
-
     res.json({
       month: monthNum,
       year: yearNum,
-      totals: formatted,
+      data, // [{ day: '2026-04-01', total: 500 }, ...]
     });
 
   } catch (err) {
