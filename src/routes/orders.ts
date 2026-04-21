@@ -90,6 +90,86 @@ router.get("/month", async (req, res) => {
   res.json(data);
 });
 
+// Get a summary of orders by status
+// GET /orders/status-summary?status=completed
+router.get("/status-summary", async (req, res) => {
+  const { status } = req.query;
+
+  if (!status) {
+    return res.status(400).json({
+      error: "status is required",
+    });
+  }
+
+  try {
+    const { data, error, count } = await supabase
+      .from("orders")
+      .select("*", { count: "exact" })
+      .eq("status", status);
+
+    if (error) {
+      return res.status(500).json({
+        error: error.message,
+      });
+    }
+
+    res.json({
+      status,
+      count,
+      data,
+    });
+
+  } catch (err) {
+    res.status(500).json({
+      error: "Unexpected server error",
+    });
+  }
+});
+
+
+// Get all orders for a specific date
+// GET /orders/by-date?date=2024-05-01
+router.get("/by-date", async (req, res) => {
+  const { date } = req.query;
+
+  // ✅ validation
+  if (!date) {
+    return res.status(400).json({
+      error: "date is required (format: YYYY-MM-DD)",
+    });
+  }
+
+  try {
+    // define start and end of the day
+    const start = `${date}T00:00:00`;
+    const end = `${date}T23:59:59`;
+
+    const { data, error } = await supabase
+      .from("orders")
+      .select("*")
+      .gte("created_at", start)
+      .lte("created_at", end)
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      return res.status(500).json({
+        error: error.message,
+      });
+    }
+
+    res.json({
+      date,
+      count: data.length,
+      data,
+    });
+
+  } catch (err) {
+    res.status(500).json({
+      error: "Unexpected server error",
+    });
+  }
+});
+
 // Get all daily totals of both orders and disbursements for a given month and year
 // GET /orders/daily-orders?month=5&year=2024
 router.get("/daily-orders", async (req, res) => {
