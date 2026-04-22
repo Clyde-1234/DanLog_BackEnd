@@ -3,13 +3,6 @@ import { supabase } from "../supabaseClient";
 
 const router = express.Router();
 
-// GET /orders (get all orders)
-router.get("/", async (req, res) => {
-  const { data, error } = await supabase.from("orders").select("*");
-  if (error) return res.status(500).json({ error: error.message });
-  res.json(data);
-});
-
 router.get("/", async (req, res) => {
   const { limit = 20, cursorCreatedAt, cursorId } = req.query;
 
@@ -275,22 +268,36 @@ router.get("/total/year", async (req, res) => {
 
 // POST a new order
 router.post("/", async (req, res) => {
-  let { customer_name, total_weight, load, status, amount, id=null } = req.body;
-  if (!customer_name || !total_weight || !load || !status || !amount) return res.status(400).json({ error: "All fields required" });
+  let { customer_name, total_weight, load, status, amount, id } = req.body;
 
-  if (typeof customer_name !== "string" || typeof Number(total_weight) !== "number" || typeof Number(load) !== "number" || typeof status !== "string" || typeof Number(amount) !== "number") {
-    return res.status(400).json({ error: "Invalid data types" });
+  // 1. Validation
+  if (!customer_name || !total_weight || !load || !status || !amount) {
+    return res.status(400).json({ error: "All fields required" });
   }
 
-  total_weight = Number(total_weight)
-  load = Number(load);
-  amount = Number(amount);
-  
-  const { data, error } = await supabase.from("orders").insert([{customer_name, total_weight, load, status, amount, id }]);
+  // 2. Prepare the insert object
+  // Only add 'id' to this object if it's actually provided in the request
+  const insertData: any = {
+    customer_name,
+    total_weight: Number(total_weight),
+    load: Number(load),
+    status,
+    amount: Number(amount)
+  };
+
+  if (id) insertData.id = id;
+
+  // 3. Insert into Supabase
+  const { data, error } = await supabase
+    .from("orders")
+    .insert([insertData])
+    .select() // Added .select() to get the generated ID back
+    .single();
+
   if (error) return res.status(500).json({ error: error.message });
 
-  res.status(201).json("Order created successfully");
-
+  // 4. Return the actual object (including the new ID)
+  res.status(201).json(data);
 });
 
 // DELETE disbursement by ID

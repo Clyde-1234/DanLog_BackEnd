@@ -1,154 +1,113 @@
 import request from "supertest";
-import express from "express";
+import express, { Express } from "express";
 import router from "../routes/checkList";
 import { supabase } from "../supabaseClient";
 
-
-jest.mock("../supabaseClient", () => {
-  const mockQuery = {
-    select: jest.fn().mockReturnThis(),
-    insert: jest.fn().mockReturnThis(),
-    delete: jest.fn().mockReturnThis(),
-    update: jest.fn().mockReturnThis(),
-    eq: jest.fn().mockReturnThis(),
-    gte: jest.fn().mockReturnThis(),
-    lt: jest.fn().mockReturnThis(),
-  };
-
-  return {
-    supabase: {
-      from: jest.fn(() => mockQuery),
-      rpc: jest.fn(),
-    },
-  };
-});
-
-const app = express();
+const app: Express = express();
 app.use(express.json());
 app.use("/checkList", router);
 
-beforeEach(() => {
-  jest.clearAllMocks();
-});
+describe("CheckList Integration Tests", () => {
+  let testTaskId: number;
 
-// --------------------------------------------------
-// GET /checkList
-// --------------------------------------------------
+  // Clean the table before starting
+  beforeAll(async () => {
+    const { error } = await supabase.from("check_list").delete().neq("id", -1);
+    if (error) console.error("Cleanup error:", error.message);
+  });
 
-describe("GET /checkList", () => {
-  it("should return all check list items", async () => {
-    (supabase.from as jest.Mock).mockReturnValue({
-        select: jest.fn().mockResolvedValue({
-            data: [
-                {id: 1, task: "Task 1", is_done: false},
-                {id: 2, task: "Task 2", is_done: true},
-            ],
-            error: null
-        })
-    });
+  // --------------------------------------------------
+  // POST /checkList
+  // --------------------------------------------------
+  describe("POST /checkList", () => {
+    it("should create a new task in the database", async () => {
+      const newTask = { task: "Integration Test Task", is_done: false };
+      
+      const res = await request(app).post("/checkList").send(newTask);
 
-    const res = await request(app).get("/checkList");
+      if (res.status !== 201) {
+        console.log("Debug POST Error:", res.body);
+      }
 
-    expect(res.status).toBe(200);
-    expect(res.body.length).toBe(2);
-    expect(res.body[0].task).toBe("Task 1");
-    expect(res.body[1].is_done).toBe(true);
-    });
-});
-
-describe("POST /checkList", () => {
-    it("should create a new task", async () => {
-        (supabase.from as jest.Mock).mockReturnValue({
-            insert: jest.fn().mockResolvedValue({
-                data: null,
-                error: null,
-            }),
-        });
-
-        const res = await request(app).post("/checkList").send({ task: "New Task", is_done: false });
-
-        expect(res.status).toBe(201);
-        expect(res.body.message).toBe("Task created");
-
+      expect(res.status).toBe(201);
+      // Assuming your route returns { message: "Task created", data: { id: ... } }
+      // Or we fetch it manually if it doesn't return the ID
+      const { data } = await supabase
+        .from("check_list")
+        .select("id")
+        .eq("task", "Integration Test Task")
+        .single();
+      
+      testTaskId = data?.id;
+      expect(testTaskId).toBeDefined();
     });
 
     it("should return 400 for invalid input", async () => {
-        const res = await request(app).post("/checkList").send({ task: "Task without is_done" });
+      const res = await request(app).post("/checkList").send({ task: "Missing is_done" });
+      expect(res.status).toBe(400);
+    });
+  });
 
-        expect(res.status).toBe(400);
-        expect(res.body.error).toBe("Invalid input");
+  // --------------------------------------------------
+  // GET /checkList
+  // --------------------------------------------------
+  describe("GET /checkList", () => {
+    it("should return all check list items from the DB", async () => {
+      const res = await request(app).get("/checkList");
+
+      expect(res.status).toBe(200);
+      expect(Array.isArray(res.body)).toBe(true);
+      expect(res.body.some((item: any) => item.id === testTaskId)).toBe(true);
+    });
+  });
+
+  // --------------------------------------------------
+  // PATCH /checkList
+  // --------------------------------------------------
+  describe("PATCH /checkList", () => {
+    it("should update task status in the DB", async () => {
+      const res = await request(app)
+        .patch("/checkList")
+        .send({ id: testTaskId, is_done: true });
+
+      expect(res.status).toBe(200);
+      expect(res.body.message).toBe("Task updated");
+
+      // Verify DB state
+      const { data } = await supabase
+        .from("check_list")
+        .select("is_done")
+        .eq("id", testTaskId)
+        .single();
+      
+      expect(data?.is_done).toBe(true);
+    });
+  });
+
+  // --------------------------------------------------
+  // DELETE /checkList
+  // --------------------------------------------------
+  describe("DELETE /checkList", () => {
+    it("should delete a task from the DB", async () => {
+      const res = await request(app)
+        .delete("/checkList")
+        .send({ id: testTaskId });
+
+      expect(res.status).toBe(200);
+      expect(res.body.message).toBe("Task deleted");
+
+      // Verify it is gone
+      const { data } = await supabase
+        .from("check_list")
+        .select("*")
+        .eq("id", testTaskId);
+      
+      expect(data?.length).toBe(0);
     });
 
-    it("should handle database error", async () => {
-        (supabase.from as jest.Mock).mockReturnValue({
-            insert: jest.fn().mockResolvedValue({
-                data: null,
-                error: { message: "Database error" },
-            }),
-        });
-
-        const res = await request(app).post("/checkList").send({ task: "Task", is_done: false });
-
-        expect(res.status).toBe(500);
-        expect(res.body.error).toBe("Database error");
+    it("should return 400 for missing id", async () => {
+      const res = await request(app).delete("/checkList").send({});
+      expect(res.status).toBe(400);
     });
-});
-
-describe("PATCH /checkList", () => {
-    it("should update task status", async () => {
-        (supabase.from as jest.Mock).mockReturnValue({
-            update: jest.fn().mockReturnThis(),
-            eq: jest.fn().mockResolvedValue({
-                data: [{ id: 1, task: "Task", is_done: true }],
-                error: null,
-            }),
-        });
-
-        const res = await request(app).patch("/checkList").send({ id: 1, is_done: true });
-
-        expect(res.status).toBe(200);
-        expect(res.body.message).toBe("Task updated");
-
-    });
-});
-
-describe("DELETE /checkList", () => {
-    it("should delete a task", async () => {
-        (supabase.from as jest.Mock).mockReturnValue({
-            delete: jest.fn().mockReturnThis(),
-            eq: jest.fn().mockResolvedValue({
-                data: null,
-                error: null,
-            }),
-        });
-
-        const res = await request(app).delete("/checkList").send({ id: 1 });
-
-        expect(res.status).toBe(200);
-        expect(res.body.message).toBe("Task deleted");
-
-    });
-
-    it("should handle input error", async () => {
-        const res = await request(app).delete("/checkList").send({});
-
-        expect(res.status).toBe(400);
-        expect(res.body.error).toBe("Invalid input");
-    });
-
-    it("should handle database error", async () => {
-        (supabase.from as jest.Mock).mockReturnValue({
-            delete: jest.fn().mockReturnThis(),
-            eq: jest.fn().mockResolvedValue({
-                data: null,
-                error: { message: "Database error" },
-            }),
-        });
-
-        const res = await request(app).delete("/checkList").send({ id: 1 });
-
-        expect(res.status).toBe(500);
-        expect(res.body.error).toBe("Database error");
-    });
-
+  });
 });

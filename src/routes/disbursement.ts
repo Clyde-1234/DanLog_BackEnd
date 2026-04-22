@@ -96,13 +96,21 @@ router.get("/total", async (req, res) => {
 // POST a new disbursement
 router.post("/", async (req, res) => {
   const { name, amount, transaction_date } = req.body;
-  if (!name || !amount || !transaction_date) return res.status(400).json({ error: "All fields required" });
+  
+  if (!name || !amount || !transaction_date) {
+    return res.status(400).json({ error: "All fields required" });
+  }
 
-  const { data, error } = await supabase.from("disbursements").insert([{ name, amount, transaction_date}]);
+  // Use .select().single() to return the created object to the test/frontend
+  const { data, error } = await supabase
+    .from("disbursements")
+    .insert([{ name, amount, transaction_date }])
+    .select()
+    .single();
+
   if (error) return res.status(500).json({ error: error.message });
 
-  res.status(201).json("Disbursement created successfully");
-
+  res.status(201).json(data);
 });
 
 // DELETE disbursement by ID

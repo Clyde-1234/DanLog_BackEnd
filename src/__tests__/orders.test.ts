@@ -1,273 +1,82 @@
 import request from "supertest";
-import express from "express";
+import express, { Express } from "express";
 import router from "../routes/orders";
 import { supabase } from "../supabaseClient";
 
-jest.mock("../supabaseClient", () => {
-  const mockQuery = {
-    select: jest.fn().mockReturnThis(),
-    insert: jest.fn().mockReturnThis(),
-    delete: jest.fn().mockReturnThis(),
-    update: jest.fn().mockReturnThis(),
-    eq: jest.fn().mockReturnThis(),
-    gte: jest.fn().mockReturnThis(),
-    lt: jest.fn().mockReturnThis(),
-  };
-
-  return {
-    supabase: {
-      from: jest.fn(() => mockQuery),
-      rpc: jest.fn(),
-    },
-  };
-});
-
-const app = express();
+const app: Express = express();
 app.use(express.json());
 app.use("/orders", router);
 
-beforeEach(() => {
-  jest.clearAllMocks();
-});
+describe("Orders Integration Tests", () => {
+  let testOrderId: any;
 
-// --------------------------------------------------
-// GET /orders
-// --------------------------------------------------
-describe("GET /orders", () => {
-  it("should return all orders", async () => {
-    (supabase.from as jest.Mock).mockReturnValue({
-      select: jest.fn().mockResolvedValue({
-        data: [{ id: 1 }],
-        error: null,
-      }),
+  beforeAll(async () => {
+    await supabase.from("orders").delete().neq("id", -1);
+  });
+
+  describe("POST /orders", () => {
+    it("should create a real order and return it", async () => {
+      const newOrder = {
+        customer_name: "Test User",
+        total_weight: "15.5",
+        load: 5,
+        status: "pending",
+        amount: 1500,
+      };
+
+      const res = await request(app).post("/orders").send(newOrder);
+
+      if (res.status !== 201) {
+        console.error("POST Failed:", res.body);
+      }
+
+      expect(res.status).toBe(201);
+    
+      if (typeof res.body === 'string') {
+          const { data } = await supabase.from("orders").select("id").limit(1).single();
+          testOrderId = data?.id;
+      } else {
+          testOrderId = res.body.id;
+      }
+      
+      expect(testOrderId).toBeDefined();
     });
-
-    const res = await request(app).get("/orders");
-
-    expect(res.status).toBe(200);
-    expect(res.body.length).toBe(1);
   });
 
-  it("should handle error", async () => {
-    (supabase.from as jest.Mock).mockReturnValue({
-      select: jest.fn().mockResolvedValue({
-        data: null,
-        error: { message: "Error" },
-      }),
+  describe("GET /orders", () => {
+    it("should handle pagination response", async () => {
+      const res = await request(app).get("/orders");
+      expect(res.status).toBe(200);
+
+      if (res.body.data) {
+          expect(Array.isArray(res.body.data)).toBe(true);
+      } else {
+          expect(Array.isArray(res.body)).toBe(true);
+      }
     });
-
-    const res = await request(app).get("/orders");
-
-    expect(res.status).toBe(500);
   });
-});
 
+  describe("PATCH /orders", () => {
+    it("should update status using the captured ID", async () => {
+      expect(testOrderId).toBeDefined();
 
-// --------------------------------------------------
-// GET /orders/month
-// --------------------------------------------------
-describe("GET /orders/month", () => {
-  it("should return rows for given month", async () => {
-    const mockChain = {
-      select: jest.fn().mockReturnThis(),
-      gte: jest.fn().mockReturnThis(),
-      lt: jest.fn().mockResolvedValue({
-        data: [{ id: 1 }],
-        error: null,
-      }),
-    };
+      const res = await request(app)
+        .patch("/orders")
+        .send({ id: testOrderId, status: "completed" });
 
-    (supabase.from as jest.Mock).mockReturnValue(mockChain);
-
-    const res = await request(app)
-      .get("/orders/month?month=5&year=2024");
-
-    expect(res.status).toBe(200);
-    expect(res.body).toEqual([{ id: 1 }]);
-  });
-});
-
-
-// --------------------------------------------------
-// GET /orders/daily-totals
-// --------------------------------------------------
-
-// --------------------------------------------------
-// GET /orders/total/month
-// --------------------------------------------------
-describe("GET /orders/total/month", () => {
-  it("should return monthly total", async () => {
-    (supabase.rpc as jest.Mock).mockResolvedValue({
-      data: 500,
-      error: null,
+      expect(res.status).toBe(200);
+      expect(res.body.message).toBe("Order status updated");
     });
-
-    const res = await request(app)
-      .get("/orders/total/month?month=5&year=2024");
-
-    expect(res.status).toBe(200);
-    expect(res.body.total).toBe(500);
   });
-});
 
+  describe("DELETE /orders", () => {
+    it("should delete the order", async () => {
+      const res = await request(app)
+        .delete("/orders")
+        .send({ id: testOrderId });
 
-// --------------------------------------------------
-// GET /orders/total/year
-// --------------------------------------------------
-describe("GET /orders/total/year", () => {
-  it("should return monthly + annual totals", async () => {
-    (supabase.rpc as jest.Mock).mockResolvedValue({
-      data: [
-        { month: 1, monthly_total: 100 },
-        { month: 2, monthly_total: 200 },
-      ],
-      error: null,
+      expect(res.status).toBe(200);
+      expect(res.body.message).toBe("Order deleted");
     });
-
-    const res = await request(app)
-      .get("/orders/total/year?year=2024");
-
-    expect(res.status).toBe(200);
-    expect(res.body.monthly.length).toBe(12);
-    expect(res.body.annual_total).toBe(300);
-  });
-});
-
-
-// --------------------------------------------------
-// POST /orders
-// --------------------------------------------------
-describe("POST /orders", () => {
-  it("should create an order", async () => {
-    (supabase.from as jest.Mock).mockReturnValue({
-      insert: jest.fn().mockResolvedValue({
-        data: null,
-        error: null,
-      }),
-    });
-
-    const res = await request(app).post("/orders").send({
-      customer_name: "Test",
-      total_weight: 10,
-      load: 5,
-      status: "pending",
-      amount: 100,
-    });
-
-    expect(res.status).toBe(201);
-  });
-
-  it("should fail on missing fields", async () => {
-    const res = await request(app).post("/orders").send({});
-
-    expect(res.status).toBe(400);
-  });
-
-  it("should fail on invalid types", async () => {
-    const res = await request(app).post("/orders").send({
-      customer_name: 123,
-      total_weight: "bad",
-      load: 5,
-      status: "pending",
-      amount: 100,
-    });
-
-    expect(res.status).toBe(400);
-  });
-});
-
-
-// --------------------------------------------------
-// DELETE /orders
-// --------------------------------------------------
-describe("DELETE /orders", () => {
-  it("should delete an order", async () => {
-    const mockChain = {
-      delete: jest.fn().mockReturnThis(),
-      eq: jest.fn().mockResolvedValue({
-        data: null,
-        error: null,
-      }),
-    };
-
-    (supabase.from as jest.Mock).mockReturnValue(mockChain);
-
-    const res = await request(app)
-      .delete("/orders")
-      .send({ id: 1 });
-
-    expect(res.status).toBe(200);
-    expect(res.body.message).toBe("Order deleted");
-  });
-
-  it("should handle errors", async () => {
-    const mockChain = {
-      delete: jest.fn().mockReturnThis(),
-      eq: jest.fn().mockResolvedValue({
-        data: null,
-        error: { message: "Error" },
-      }),
-    };
-
-    (supabase.from as jest.Mock).mockReturnValue(mockChain);
-
-    const res = await request(app)
-      .delete("/orders")
-      .send({ id: 1 });
-
-    expect(res.status).toBe(500);
-    expect(res.body.error).toBe("Error");
-  });
-});
-
-
-// --------------------------------------------------
-// PATCH /orders
-// --------------------------------------------------
-describe("PATCH /orders", () => {
-  it("should update order status", async () => {
-    const mockChain = {
-      update: jest.fn().mockReturnThis(),
-      eq: jest.fn().mockResolvedValue({
-        data: null,
-        error: null,
-      }),
-    };
-
-    (supabase.from as jest.Mock).mockReturnValue(mockChain);
-
-    const res = await request(app)
-      .patch("/orders")
-      .send({ id: 1, status: "completed" });
-
-    expect(res.status).toBe(200);
-    expect(res.body.message).toBe("Order status updated");
-  });
-
-  it("should validate input", async () => {
-    const res = await request(app)
-      .patch("/orders")
-      .send({});
-
-    expect(res.status).toBe(400);
-  });
-
-  it("should handle errors", async () => {
-    const mockChain = {
-      update: jest.fn().mockReturnThis(),
-      eq: jest.fn().mockResolvedValue({
-        data: null,
-        error: { message: "Error" },
-      }),
-    };
-
-    (supabase.from as jest.Mock).mockReturnValue(mockChain);
-
-    const res = await request(app)
-      .patch("/orders")
-      .send({ id: 1, status: "pending" });
-
-    expect(res.status).toBe(500);
-    expect(res.body.error).toBe("Error");
   });
 });

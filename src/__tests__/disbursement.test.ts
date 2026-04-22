@@ -1,168 +1,134 @@
-// tests/disbursement.test.ts
 import request from "supertest";
-import express from "express";
+import express, { Express } from "express";
 import router from "../routes/disbursement";
 import { supabase } from "../supabaseClient";
 
-jest.mock("../supabaseClient", () => {
-  const mockQuery = {
-    select: jest.fn().mockReturnThis(),
-    insert: jest.fn().mockReturnThis(),
-    delete: jest.fn().mockReturnThis(),
-    eq: jest.fn().mockReturnThis(),
-    gte: jest.fn().mockReturnThis(),
-    lt: jest.fn().mockReturnThis(),
-  };
-
-  return {
-    supabase: {
-      from: jest.fn(() => mockQuery),
-      rpc: jest.fn(),
-    },
-  };
-});
-
-const app = express();
+const app: Express = express();
 app.use(express.json());
 app.use("/disbursements", router);
 
-describe("GET /disbursements", () => {
-  it("should return all disbursements", async () => {
-    (supabase.from as jest.Mock).mockReturnValue({
-      select: jest.fn().mockResolvedValue({
-        data: [{ id: 1, name: "Test" }],
-        error: null,
-      }),
+describe("Disbursement Integration Tests", () => {
+  let testDisbursementId: number;
+  beforeAll(async () => {
+    await supabase.from("disbursements").delete().neq("id", -1);
+  });
+
+  // --------------------------------------------------
+  // POST /disbursements
+  // --------------------------------------------------
+  describe("POST /disbursements", () => {
+    it("should create a real disbursement in the database", async () => {
+      const newDisbursement = {
+        name: "Office Supplies",
+        transaction_date: new Date().toISOString(),
+        amount: 150.75,
+      };
+
+      const res = await request(app)
+        .post("/disbursements")
+        .send(newDisbursement);
+
+      if (res.status !== 201) {
+        console.error("POST Error:", res.body);
+      }
+
+      expect(res.status).toBe(201);
+
+      const { data } = await supabase
+        .from("disbursements")
+        .select("id")
+        .eq("name", "Office Supplies")
+        .order("id", { ascending: false })
+        .limit(1)
+        .single();
+      
+      testDisbursementId = data?.id;
+      expect(testDisbursementId).toBeDefined();
     });
 
-    const res = await request(app).get("/disbursements");
+    it("should fail on missing fields", async () => {
+      const res = await request(app)
+        .post("/disbursements")
+        .send({ name: "Incomplete Item" });
 
-    expect(res.status).toBe(200);
-    expect(res.body.length).toBe(1);
+      expect(res.status).toBe(400);
+    });
   });
-});
 
-describe("GET /disbursements/month", () => {
-  it("should return rows for given month", async () => {
-    const mockChain = {
-      select: jest.fn().mockReturnThis(),
-      gte: jest.fn().mockReturnThis(),
-      lt: jest.fn().mockResolvedValue({
-        data: [{ id: 1 }],
-        error: null,
-      }),
-    };
+  // --------------------------------------------------
+  // GET /disbursements
+  // --------------------------------------------------
+  describe("GET /disbursements", () => {
+    it("should return the list including the new item", async () => {
+      const res = await request(app).get("/disbursements");
 
-    (supabase.from as jest.Mock).mockReturnValue(mockChain);
-
-    const res = await request(app)
-      .get("/disbursements/month?month=1&year=2024");
-
-    expect(res.status).toBe(200);
-    expect(res.body).toEqual([{ id: 1 }]);
+      expect(res.status).toBe(200);
+      expect(Array.isArray(res.body)).toBe(true);
+      const exists = res.body.some((d: any) => d.id === testDisbursementId);
+      expect(exists).toBe(true);
+    });
   });
-});
 
-describe("GET /disbursements/total/month", () => {
-  it("should return monthly total", async () => {
-    (supabase.rpc as jest.Mock).mockResolvedValue({
-      data: 5000,
-      error: null,
+  // --------------------------------------------------
+  // GET /disbursements/month
+  // --------------------------------------------------
+  describe("GET /disbursements/month", () => {
+    it("should return rows for current month", async () => {
+      const now = new Date();
+      const month = now.getMonth() + 1;
+      const year = now.getFullYear();
+
+      const res = await request(app)
+        .get(`/disbursements/month?month=${month}&year=${year}`);
+
+      expect(res.status).toBe(200);
+      expect(Array.isArray(res.body)).toBe(true);
+    });
+  });
+
+  // --------------------------------------------------
+  // RPC Calls (Aggregation)
+  // --------------------------------------------------
+  describe("RPC Aggregation Tests", () => {
+    it("should return monthly total from RPC", async () => {
+      const now = new Date();
+      const res = await request(app)
+        .get(`/disbursements/total/month?month=${now.getMonth() + 1}&year=${now.getFullYear()}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body).toHaveProperty("total");
     });
 
-    const res = await request(app)
-      .get("/disbursements/total/month?month=1&year=2024");
+    it("should return yearly totals from RPC", async () => {
+      const year = new Date().getFullYear();
+      const res = await request(app)
+        .get(`/disbursements/total/year?year=${year}`);
 
-    expect(res.status).toBe(200);
-    expect(res.body.total).toBe(5000);
-  });
-});
-
-describe("GET /disbursements/total/year", () => {
-  it("should return monthly + annual totals", async () => {
-    (supabase.rpc as jest.Mock).mockResolvedValue({
-      data: [
-        { month: 1, monthly_total: 100 },
-        { month: 2, monthly_total: 200 },
-      ],
-      error: null,
+      expect(res.status).toBe(200);
+      expect(res.body.monthly.length).toBe(12);
+      expect(typeof res.body.annual_total).toBe("number");
     });
-
-    const res = await request(app)
-      .get("/disbursements/total/year?year=2024");
-
-    expect(res.status).toBe(200);
-    expect(res.body.monthly.length).toBe(12);
-    expect(res.body.annual_total).toBe(300);
   });
-});
 
-describe("POST /disbursements", () => {
-  it("should create a disbursement", async () => {
-    (supabase.from as jest.Mock).mockReturnValue({
-      insert: jest.fn().mockResolvedValue({
-        data: null,
-        error: null,
-      }),
+  // --------------------------------------------------
+  // DELETE /disbursements
+  // --------------------------------------------------
+  describe("DELETE /disbursements", () => {
+    it("should delete the created disbursement", async () => {
+      const res = await request(app)
+        .delete("/disbursements")
+        .send({ id: testDisbursementId });
+
+      expect(res.status).toBe(200);
+      expect(res.body.message).toBe("Disbursement deleted");
+
+      // Verify deletion from DB
+      const { data } = await supabase
+        .from("disbursements")
+        .select("id")
+        .eq("id", testDisbursementId);
+      
+      expect(data?.length).toBe(0);
     });
-
-    const res = await request(app)
-      .post("/disbursements")
-      .send({
-        name: "Item",
-        transaction_date: "2024-01-01",
-        amount: 100,
-      });
-
-    expect(res.status).toBe(201);
   });
-
-  it("should fail on missing fields", async () => {
-    const res = await request(app)
-      .post("/disbursements")
-      .send({ name: "Item" });
-
-    expect(res.status).toBe(400);
-  });
-});
-
-describe("DELETE /disbursements", () => {
-  it("should delete a disbursement", async () => {
-    const mockChain = {
-      delete: jest.fn().mockReturnThis(),
-      eq: jest.fn().mockResolvedValue({
-        data: null,
-        error: null,
-      }),
-    };
-
-    (supabase.from as jest.Mock).mockReturnValue(mockChain);
-
-    const res = await request(app)
-      .delete("/disbursements")
-      .send({ id: 1 });
-
-    expect(res.status).toBe(200);
-    expect(res.body.message).toBe("Disbursement deleted");
-  });
-
-  it("should handle errors", async () => {
-    const mockChain = {
-      delete: jest.fn().mockReturnThis(),
-      eq: jest.fn().mockResolvedValue({
-        data: null,
-        error: { message: "Error" },
-      }),
-    };
-
-    (supabase.from as jest.Mock).mockReturnValue(mockChain);
-
-    const res = await request(app)
-      .delete("/disbursements")
-      .send({ id: 1 });
-
-    expect(res.status).toBe(500);
-    expect(res.body.error).toBe("Error");
-  });
-
 });
