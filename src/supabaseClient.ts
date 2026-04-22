@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import dotenv from 'dotenv';
 
+if (!process.env.CI) {
   dotenv.config();
 }
 
@@ -14,7 +15,7 @@ if (!supabaseUrl || !supabaseKey) {
   console.error("CI Env Active:", !!process.env.CI);
   console.error("NODE_ENV:", process.env.NODE_ENV);
   console.error("---------------------------");
-  throw new Error('Supabase URL and Key are required.');
+  throw new Error('Supabase URL and Key are required to initialize the client.');
 }
 
 export const supabase = createClient(supabaseUrl, supabaseKey);
