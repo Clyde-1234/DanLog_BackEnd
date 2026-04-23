@@ -212,7 +212,43 @@ router.get("/daily-orders", async (req, res) => {
   }
 });
 
+router.get("/today-total", async (req, res) => {
+  try {
+    // get today's date range (UTC safe)
+    const today = new Date();
 
+    const start = new Date(
+      Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate(), 0, 0, 0)
+    ).toISOString();
+
+    const end = new Date(
+      Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate(), 23, 59, 59)
+    ).toISOString();
+
+    const { data, error } = await supabase
+      .from("orders")
+      .select("amount")
+      .gte("created_at", start)
+      .lte("created_at", end);
+
+    if (error) {
+      return res.status(500).json({ error: error.message });
+    }
+
+    // sum all amounts
+    const total = data.reduce((sum, row) => sum + Number(row.amount), 0);
+
+    res.json({
+      date: start.split("T")[0],
+      total,
+    });
+
+  } catch (err) {
+    res.status(500).json({
+      error: "Unexpected server error",
+    });
+  }
+});
 
 
 
