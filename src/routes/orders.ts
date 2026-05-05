@@ -1,5 +1,7 @@
 import express from "express";
 import { supabase } from "../supabaseClient";
+import { formatYearlyMonthlyTotals, RevenueTotalStrategy } from "../patterns/FinancialTotalStrategy";
+import { LaundryRecordFactory } from "../patterns/LaundryRecordFactory";
 
 const router = express.Router();
 
@@ -282,24 +284,7 @@ router.get("/total/year", async (req, res) => {
 
   if (error) return res.status(500).json({ error });
 
-  // Fill missing months (important)
-  const fullYear = Array.from({ length: 12 }, (_, i) => ({
-    month: i + 1,
-    total: 0,
-  }));
-
-  data.forEach((row: { month: number; monthly_total: any; }) => {
-    fullYear[row.month - 1].total = Number(row.monthly_total);
-  });
-
-  // Annual total
-  const annualTotal = fullYear.reduce((sum, m) => sum + m.total, 0);
-
-  res.json({
-    year: Number(year),
-    monthly: fullYear,
-    annual_total: annualTotal,
-  });
+  res.json(formatYearlyMonthlyTotals(Number(year), data, new RevenueTotalStrategy()));
 });
 
 // POST a new order
@@ -311,17 +296,14 @@ router.post("/", async (req, res) => {
     return res.status(400).json({ error: "All fields required" });
   }
 
-  // 2. Prepare the insert object
-  // Only add 'id' to this object if it's actually provided in the request
-  const insertData: any = {
+  const insertData = LaundryRecordFactory.createOrderRecord({
     customer_name,
-    total_weight: Number(total_weight),
-    load: Number(load),
+    total_weight,
+    load,
     status,
-    amount: Number(amount)
-  };
-
-  if (id) insertData.id = id;
+    amount,
+    id,
+  });
 
   // 3. Insert into Supabase
   const { data, error } = await supabase
