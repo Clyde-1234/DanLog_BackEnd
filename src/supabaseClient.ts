@@ -1,5 +1,5 @@
-import { createClient } from '@supabase/supabase-js';
 import dotenv from 'dotenv';
+import { SupabaseClientSingleton } from './patterns/SupabaseClientSingleton';
 
 if (!process.env.CI) {
   dotenv.config();
@@ -18,4 +18,7 @@ if (!supabaseUrl || !supabaseKey) {
   throw new Error('Supabase URL and Key are required to initialize the client.');
 }
 
-export const supabase = createClient(supabaseUrl, supabaseKey);
+export const supabase = SupabaseClientSingleton.getInstance({
+  url: supabaseUrl,
+  key: supabaseKey,
+});

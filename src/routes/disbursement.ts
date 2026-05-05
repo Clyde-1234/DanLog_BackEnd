@@ -1,6 +1,7 @@
 import express from "express";
 import { supabase } from "../supabaseClient";
-import { create } from "node:domain";
+import { ExpenseTotalStrategy, formatYearlyMonthlyTotals } from "../patterns/FinancialTotalStrategy";
+import { LaundryRecordFactory } from "../patterns/LaundryRecordFactory";
 
 const router = express.Router();
 
@@ -63,24 +64,7 @@ router.get("/total/year", async (req, res) => {
 
   if (error) return res.status(500).json({ error });
 
-  // Fill missing months (important)
-  const fullYear = Array.from({ length: 12 }, (_, i) => ({
-    month: i + 1,
-    total: 0,
-  }));
-
-  data.forEach((row: { month: number; monthly_total: any; }) => {
-    fullYear[row.month - 1].total = Number(row.monthly_total);
-  });
-
-  // Annual total
-  const annualTotal = fullYear.reduce((sum, m) => sum + m.total, 0);
-
-  res.json({
-    year: Number(year),
-    monthly: fullYear,
-    annual_total: annualTotal,
-  });
+  res.json(formatYearlyMonthlyTotals(Number(year), data, new ExpenseTotalStrategy()));
 });
 
 // Get total disbursements for all time
@@ -104,7 +88,7 @@ router.post("/", async (req, res) => {
   // Use .select().single() to return the created object to the test/frontend
   const { data, error } = await supabase
     .from("disbursements")
-    .insert([{ name, amount, transaction_date }])
+    .insert([LaundryRecordFactory.createDisbursementRecord({ name, amount, transaction_date })])
     .select()
     .single();
 
